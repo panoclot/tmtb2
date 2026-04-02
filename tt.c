@@ -764,7 +764,7 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 				break;
 			case NOP:
 				if (arg_start == EMPTY) {
-					printf("no activity is selected. here are available choices:");
+					printf("no activity is selected. these are available choices:"); // TODO
 					printf("there are no available choices.\ncreate an activity with: `tt new activity [name]`\nit will remain selected on next invoke.\n");
 				} else {
 				}
