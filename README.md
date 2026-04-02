@@ -5,10 +5,10 @@ this is a rewritten from scratch version of the original tmtb i made some time a
 
 ## hoe toe use this piece of ~~shit~~ junk
 
-`tt activity new japanese` creates new activity called "japanese"
-`tt start/stop` starts or stops tracking time for "japanese". last used activity name will be remembered.
-`tt flip` flips the timer on or off.
-`tt show all` will list every activity.
+`tt activity new japanese` creates new activity called "japanese"\
+`tt start/stop` starts or stops tracking time for "japanese". last used activity name will be remembered.\
+`tt flip` flips the timer on or off.\
+`tt show all` will list every activity.\
 
 try `tt help` for more options.
 
