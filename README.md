@@ -10,7 +10,7 @@ this is a rewritten from scratch version of the original tmtb i made some time a
 `tt flip` flips the timer on or off.\
 `tt show all` will list every activity.
 
-try `tt help` for more options.
+try `tt help` for more options. (doesn't work yet :p)
 
 ## tbd
 
