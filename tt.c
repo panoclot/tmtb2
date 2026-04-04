@@ -72,7 +72,7 @@ typedef struct {
 
 	unsigned int write_to_db;
 	// int last_selected_actv;
-	char last_selected_actv[128];
+	char last_selected_actv[64];
 
 	int tokens[128];
 	// unsigned int is_user_specified_arg;
@@ -99,7 +99,7 @@ typedef struct {
 	int goal;
 	int rec_count;
 	int rec_size;
-	char name[128];
+	char name[64];
 	rec *rec_arr;
 } actv;
 
@@ -185,7 +185,7 @@ int actv_find (actv_arr *actv_arr, char *query)
 	if (actv_arr->arr == NULL) { return -1; }
 
 	for (int i = 0; i < actv_arr->count; i++) {
-		if (!strncmp(query, actv_arr->arr[i].name, 128))
+		if (!strncmp(query, actv_arr->arr[i].name, 64))
 			return i;
 	}
 
@@ -510,9 +510,9 @@ void db_write (FILE *db, actv_arr *actv_arr, options options)
 
 void completion (char *token, char **target_list);
 
-void set_options (int argc, char **argv, options *options)
+int set_options (int argc, char **argv, options *options)
 {
-	if (argc > 127) { puts("too many args!"); return; }
+	if (argc > 128) { puts("too many args!"); return 1; }
 
 	char option_list[][10] = {
 		"auto",
@@ -580,9 +580,11 @@ void set_options (int argc, char **argv, options *options)
 			}
 		}
 	}
+
+	return 0;
 }
 
-int ui_new (int argc, char **argv, actv_arr *actv_arr, options *options)
+int ui_new (char **argv, actv_arr *actv_arr, options *options)
 {
 	options->write_to_db = 1;
 	if (options->opt_arg == EMPTY) { printf("you need to specify what you want to create. (activity or record)\n"); return 1; }
@@ -624,7 +626,7 @@ int ui_new (int argc, char **argv, actv_arr *actv_arr, options *options)
 	// TODO / change to void?
 }
 
-void ui_rm (int argc, char **argv, actv_arr *actv_arr, options *options)
+void ui_rm (char **argv, actv_arr *actv_arr, options *options)
 {
 	options->write_to_db = 1;
 	// strncpy(options->last_selected_actv, "none");
@@ -710,7 +712,7 @@ void ui_rm (int argc, char **argv, actv_arr *actv_arr, options *options)
 					sleep(1);
 				}
 				rec_rm(&actv_arr->arr[tmp], index);
-				printf("record deleted.\n", argv[options->arg_start]);
+				printf("record deleted.\n");
 			} else {
 				printf("activity \"%s\" hasn't been found.\n", argv[options->arg_start]);
 			}
@@ -722,7 +724,7 @@ void ui_rm (int argc, char **argv, actv_arr *actv_arr, options *options)
 	}
 }
 
-void ui_start (int argc, char **argv, actv_arr *actv_arr, options *options)
+void ui_start (char **argv, actv_arr *actv_arr, options *options)
 {
 	options->write_to_db = 1;
 	if (strcmp(options->last_selected_actv, "none")) { 
@@ -740,7 +742,7 @@ void ui_start (int argc, char **argv, actv_arr *actv_arr, options *options)
 	}
 }
 
-void ui_stop (int argc, char **argv, actv_arr *actv_arr, options *options)
+void ui_stop (char **argv, actv_arr *actv_arr, options *options)
 {
 	options->write_to_db = 1;
 	if (strcmp(options->last_selected_actv, "none")) { 
@@ -758,7 +760,7 @@ void ui_stop (int argc, char **argv, actv_arr *actv_arr, options *options)
 	}
 }
 
-void ui_flip (int argc, char **argv, actv_arr *actv_arr, options *options)
+void ui_flip (char **argv, actv_arr *actv_arr, options *options)
 {
 	options->write_to_db = 1;
 	if (strcmp(options->last_selected_actv, "none")) { 
@@ -780,7 +782,7 @@ void ui_flip (int argc, char **argv, actv_arr *actv_arr, options *options)
 	}
 }
 
-void ui_show (int argc, char **argv, actv_arr *actv_arr, options *options)
+void ui_show (char **argv, actv_arr *actv_arr, options *options)
 {
 	if (options->opt_arg != EMPTY) {
 		switch (options->tokens[options->opt_arg]) {
@@ -910,37 +912,37 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 		switch (options->tokens[option]) {
 			case NEW:
 			case ADD:
-				ui_new(argc, argv, actv_arr, options);
+				ui_new(argv, actv_arr, options);
 				break;
 			case REMOVE:
 			case DELETE:
 			case DEL:
 			case RM:
-				ui_rm(argc, argv, actv_arr, options);
+				ui_rm(argv, actv_arr, options);
 				// TODO / fix last_selected_actv being changed to int
 				break;
 			case EDIT:
-				// ui_edit(argc, argv, actv_arr, options);
+				// ui_edit(argv, actv_arr, options);
 				options->write_to_db = 1;
 				puts("tbd"); // TODO
 				break;
 			case RENAME:
-				// ui_rename(argc, argv, actv_arr, options);
+				// ui_rename(argv, actv_arr, options);
 				options->write_to_db = 1;
 				puts("tbd"); // TODO
 				break;
 			case START:
-				ui_start(argc, argv, actv_arr, options);
+				ui_start(argv, actv_arr, options);
 				break;
 			case STOP:
 			case PAUSE:
-				ui_stop(argc, argv, actv_arr, options);
+				ui_stop(argv, actv_arr, options);
 				break;
 			case FLIP:
-				ui_flip(argc, argv, actv_arr, options);
+				ui_flip(argv, actv_arr, options);
 				break;
 			case SHOW:
-				ui_show(argc, argv, actv_arr, options);
+				ui_show(argv, actv_arr, options);
 				break;
 			case NOP:
 				if (arg_start == EMPTY) {
@@ -961,7 +963,7 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 	// search for last specified option and keep it as default for next operation
 	if (arg_end != EMPTY) {
 		if (actv_find(actv_arr, argv[arg_end]) != -1)
-			strncpy(options->last_selected_actv, argv[arg_end], 128);
+			strncpy(options->last_selected_actv, argv[arg_end], 64);
 	}
 }
 
@@ -978,13 +980,13 @@ int main (int argc, char **argv)
 		options.tokens[i] = EMPTY;
 	}
 	options.write_to_db = 0;
-	strncpy(options.last_selected_actv, "none", 128);
+	strncpy(options.last_selected_actv, "none", 64);
 
 	// get config path
 	// config_read();
 	// db_find();
 	 
-	set_options(argc, argv, &options);
+	if (set_options(argc, argv, &options)) return 1;
 
 	// open and read db
 	db = fopen("./db/test.db", "r");
@@ -1006,6 +1008,8 @@ int main (int argc, char **argv)
 	// if no config then set default
 
 	dealloc_all(&actv_arr);
+
+	printf("command count = %d\n", argc);
 
 	return 0;
 }
