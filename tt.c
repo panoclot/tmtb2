@@ -10,6 +10,8 @@
 #include <unistd.h>
 // #include <termios.h> // idk
 
+#define CRST "\x1B[m"
+
 #define OPT_START 0
 #define OPT_END 99
 
@@ -43,6 +45,8 @@ enum option_enum {
 	RESET,
 	SHOW,
 	LIST,
+	GOAL,
+	WEEK,
 	AND
 };
 
@@ -65,19 +69,21 @@ enum optarg_enum {
 typedef struct {
 	unsigned int show_full;
 	unsigned int color;
-	unsigned int how_many_rec_to_show;
+	// unsigned int how_many_rec_to_show;
 	unsigned int show_rec_count;
 	unsigned int show_streak;
-	int time_display_mode;
+	unsigned int show_highest_streak;
+	unsigned int show_days;
+	// int time_display_mode;
+
+	unsigned int streak_offset;
 
 	unsigned int write_to_db;
-	// int last_selected_actv;
 	char last_selected_actv[64];
 
 	int tokens[128];
-	// unsigned int is_user_specified_arg;
-	unsigned int opt_arg;
-	unsigned int option;
+	int opt_arg;
+	int option;
 	int arg_start;
 	int arg_end;
 
@@ -259,6 +265,7 @@ int rec_rm (actv *actv, int index)
 
 	rec *tmp = actv->rec_arr;
 	actv->rec_count--;
+	actv->total -= actv->rec_arr[index].time;
 
 	for (; index < actv->rec_count; index++) {
 		tmp[index] = tmp[index + 1];
@@ -348,6 +355,66 @@ void my_time_format (float *clock, char *sign, time_t time)
 	}
 }
 
+time_t get_avg_time (actv actv, int duration, int offset) 
+{
+	if (actv.rec_count == 0)
+		return 0;
+
+	float avg;
+	int cur_day = 0; 
+	int last_day = 0; // for repeated days 
+	int record = 0;
+	cur_day = (time(NULL) + offset) / 86400;
+
+	for (int i = actv.rec_count - 1; i >= actv.rec_count - duration; i--) {
+		record = (actv.rec_arr[i].created + offset) / 86400; 
+		if (record == cur_day) {
+			avg += (float)actv.rec_arr[i].time / 10; // doing like this cus might overflow or something idk
+		}
+		if (record == last_day) {
+			duration++;
+			cur_day++;
+			avg += actv.rec_arr[i].time / 10;
+		}
+		if (i == 0) {
+			break;
+		}
+		last_day = cur_day;
+		cur_day--;
+	}
+	avg = avg / 7 * 10;
+	return avg;
+}
+
+int get_streak (actv actv, int offset)
+{
+	if (actv.rec_count == 0)
+		return 0;
+
+	int streak = 0;
+	int cur_day = 0; 
+	int last_day = 0; // for repeated days 
+	int record = 0;
+	cur_day = (time(NULL) + offset) / 86400; // TODO test offset
+
+	for (int i = actv.rec_count - 1; i >= 0; i--) {
+		record = (actv.rec_arr[i].created + offset) / 86400; 
+		if (record == last_day) {
+			cur_day++;
+			continue;
+		}
+		if (record != cur_day) {
+			// printf("cur %d rec %d \n", cur_day, record); // debug
+			break;
+		}
+		streak++;
+		last_day = cur_day;
+		cur_day--;
+	}
+
+	return streak;
+}
+
 void actv_show (actv actv, options options)
 {
 	struct tm *tm;
@@ -355,7 +422,33 @@ void actv_show (actv actv, options options)
 	char sign;
 	float clock;
 
-	printf("\n# %s\n", actv.name);
+	time_t avg = get_avg_time(actv, 7, 0);
+
+	char *red; // = "\x1B[38;2;255;100;112m";
+	char *blue; // = "\x1B[38;2;126;172;252m";
+	char *green; // = "\x1B[38;2;163;252;129m";
+	char *light_green;
+	char *dark_green;
+
+	// fg_color \e[48;2;0;0;40m
+	// bg_color \e[38;2;0;0;40m
+
+	if (options.color) {
+		red = "\x1B[38;2;255;100;112m";
+		blue = "\x1B[38;2;126;172;252m";
+		green = "\x1B[38;2;61;186;61m";
+		light_green= "\x1B[38;2;141;227;141m";
+		dark_green = "\x1B[38;2;29;105;29m";
+	} else {
+		red = "";
+		blue = "";
+		green = "";
+		light_green = "";
+		dark_green = "";
+	}
+
+	printf("%s\n# %s" CRST "\n", blue, actv.name);
+
 	if (actv.rec_arr != NULL) { // print records
 		for (int i = actv.rec_count - 1; i >= 0; i--) {
 			tm = localtime(&actv.rec_arr[i].created);
@@ -365,32 +458,68 @@ void actv_show (actv actv, options options)
 				break;
 			}
 
+			char *color_intensity; // set color intensity for displaying records
+			if (actv.rec_arr[i].time > avg + avg / 2)
+				color_intensity = dark_green;
+			else if (actv.rec_arr[i].time > avg)
+				color_intensity = green;
+			else if (actv.rec_arr[i].time <= avg && actv.rec_arr[i].time > avg / 2)
+				color_intensity = light_green;
+			else
+				color_intensity = ""; // white
+
 			my_time_format(&clock, &sign, actv.rec_arr[i].time);
 			if (sign == 's')
-				printf("%s | %1.f%c", date, clock, sign);
+				printf("%s%s | %1.f%c" CRST, color_intensity, date, clock, sign);
 			else
-				printf("%s | %.1f%c", date, clock, sign);
+				printf("%s%s | %.1f%c" CRST, color_intensity, date, clock, sign);
 
-			if (actv.is_run && i == actv.rec_count - 1)
-				printf(" active\n");
-			else
+			if (actv.is_run && i == actv.rec_count - 1) {
+				my_time_format(&clock, &sign, time(NULL) - actv.timer);
+				printf("%s <- active (+%.3f%c elapsed)\n" CRST, 
+					red,
+					clock,
+					sign
+				);
+			} else {
 				printf("\n");
+			}
 		}
 	}
 
-	tm = localtime(&actv.created);
+	tm = localtime(&actv.created); // created time
 	strftime(date, 32, "%Y-%m-%d at %H:%M", tm);
 	printf("created: %s\n", date);
 
-	my_time_format(&clock, &sign, actv.total);
+	my_time_format(&clock, &sign, actv.total); // total time
 	if (sign == 's')
-		printf("total time: %1.f%c\n", clock, sign);
+		printf("total time: %1.f%c", clock, sign);
 	else
-		printf("total time: %.1f%c\n", clock, sign);
-	// printf("streak: %s\n", "none yet"); // TODO
+		printf("total time: %.1f%c", clock, sign);
+	if (actv.is_run) {
+		my_time_format(&clock, &sign, time(NULL) - actv.timer);
+		printf("%s (+%.3f%c)\n" CRST, 
+			red,
+			clock,
+			sign
+		);
+	} else
+		printf("\n");
+
+	printf("streak: %d\n", get_streak(actv, 0)); // streak
+
 	// printf("highest streak: %s\n", "none yet"); // TODO
-	// printf("week average: %s\n", "none yet"); // TODO
-	printf("record count: %d\n", actv.rec_count); // debug
+
+	// my_time_format(&clock, &sign, get_avg_time(actv, 7)); // week average
+	my_time_format(&clock, &sign, avg); // week average
+	if (sign == 's')
+		printf("week average: %1.f%c\n", clock, sign); // TODO
+	else
+		printf("week average: %.1f%c\n", clock, sign); // TODO
+
+	printf("goal: %s\n", "not set"); // goal TODO
+
+	printf("record count: %d\n", actv.rec_count);
 }
 
 void rec_show (actv actv, options options)
@@ -411,7 +540,13 @@ void rec_show (actv actv, options options)
 		if (sign == 's') { printf("#%d:	%s | %1.f%c", i + 1, date, clock, sign); }
 		else { printf("#%d:	%s | %.1f%c", i + 1, date, clock, sign); }
 
-		if (actv.is_run && i == actv.rec_count - 1) { printf(" <-- active\n"); }
+		my_time_format(&clock, &sign, time(NULL) - actv.timer);
+		if (actv.is_run && i == actv.rec_count - 1) { 
+			printf(" <-- active (+%.1f%c elapsed)\n",
+				clock,
+				sign
+			);
+		}
 		else { printf("\n"); }
 	}
 
@@ -440,7 +575,7 @@ void db_read (FILE *db, actv_arr *actv_arr, options *options)
 		switch (sign) {
 			case 'H':
 				fscanf(db, ",%[^,],\n",
-					&options->last_selected_actv
+					options->last_selected_actv
 				);
 				break;
 			case 'A':
@@ -503,12 +638,7 @@ void db_write (FILE *db, actv_arr *actv_arr, options options)
 			}
 		}
 	}
-
-	// dealloc_all(actv_arr);
-	// dealloc
 }
-
-void completion (char *token, char **target_list);
 
 int set_options (int argc, char **argv, options *options)
 {
@@ -541,6 +671,8 @@ int set_options (int argc, char **argv, options *options)
 		"reset", // reset timer
 		"show",
 		"list",
+		"goal",
+		"week",
 		"and"
 	};
 
@@ -584,11 +716,11 @@ int set_options (int argc, char **argv, options *options)
 	return 0;
 }
 
-int ui_new (char **argv, actv_arr *actv_arr, options *options)
+void ui_new (char **argv, actv_arr *actv_arr, options *options)
 {
 	options->write_to_db = 1;
-	if (options->opt_arg == EMPTY) { printf("you need to specify what you want to create. (activity or record)\n"); return 1; }
-	if (options->arg_start == EMPTY) { printf("no name was specified. try `tt new [type] [name]`\n"); return 1; }
+	if (options->opt_arg == EMPTY) { printf("you need to specify what you want to create. (activity or record)\n"); return; }
+	if (options->arg_start == EMPTY) { printf("no name was specified. try `tt new [type] [name]`\n"); return; }
 
 	switch (options->tokens[options->opt_arg]) {
 		case ACTIVITY:
@@ -622,8 +754,6 @@ int ui_new (char **argv, actv_arr *actv_arr, options *options)
 			printf("incorrect option argument! try `activity` or `record`\n");
 			break;
 	}
-	return 0;
-	// TODO / change to void?
 }
 
 void ui_rm (char **argv, actv_arr *actv_arr, options *options)
@@ -697,7 +827,7 @@ void ui_rm (char **argv, actv_arr *actv_arr, options *options)
 
 				struct tm *tm = localtime(&actv_arr->arr[tmp].rec_arr[index].created);
 				char date[32];
-				strftime(date, 32, "%Y-%m-%d %H:%y", tm);
+				strftime(date, 32, "%Y-%m-%d %H:%M", tm);
 				printf("are you sure you want to delete:\n"
 				"record of \"%s\", record index %d, created %s, time %lds\n"
 				"deleteing in 7 seconds. (Ctrl+C to terminate)\n",
@@ -824,8 +954,35 @@ void ui_show (char **argv, actv_arr *actv_arr, options *options)
 	}
 }
 
-void ui_rename (int argc, char **argv, actv_arr *actv_arr, options *options);
-void ui_edit (int argc, char **argv, actv_arr *actv_arr, options *options);
+void ui_rename (char **argv, actv_arr *actv_arr, options *options)
+{
+	int index = 0;
+	options->write_to_db = 1;
+	if (options->arg_start == EMPTY) {
+		printf("no activity was specified. try `tt rename [name] [new name]`\n");
+		return;
+	}
+	if (options->arg_end == options->arg_start) {
+		printf("you need to specify a new. try `tt rename [name] [new name]`\n");
+	}
+	if (options->arg_end - options->arg_start >= 2) {
+		printf("too many arguments for rename. only 2 are allowed at once.\n");
+	}
+	if ((index = actv_find(actv_arr, argv[options->arg_start])) == -1) {
+		printf("activity \"%s\" hasn't been found.\n", argv[options->arg_start]);
+		return;
+	}
+	if (actv_find(actv_arr, argv[options->arg_end]) != -1) {
+		printf("activity \"%s\" already exists.\n", argv[options->arg_end]);
+		return;
+	}
+
+	actv_rename(actv_arr, index, argv[options->arg_end]);
+}
+
+void ui_edit (char **argv, actv_arr *actv_arr, options *options);
+
+void ui_goal (char **argv, actv_arr *actv_arr, options *options);
 
 void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 {
@@ -923,13 +1080,13 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 				break;
 			case EDIT:
 				// ui_edit(argv, actv_arr, options);
-				options->write_to_db = 1;
+				// options->write_to_db = 1;
 				puts("tbd"); // TODO
 				break;
 			case RENAME:
-				// ui_rename(argv, actv_arr, options);
-				options->write_to_db = 1;
-				puts("tbd"); // TODO
+				ui_rename(argv, actv_arr, options);
+				// options->write_to_db = 1;
+				// puts("tbd"); // TODO
 				break;
 			case START:
 				ui_start(argv, actv_arr, options);
@@ -943,6 +1100,8 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 				break;
 			case SHOW:
 				ui_show(argv, actv_arr, options);
+				break;
+			case GOAL:
 				break;
 			case NOP:
 				if (arg_start == EMPTY) {
@@ -980,6 +1139,8 @@ int main (int argc, char **argv)
 		options.tokens[i] = EMPTY;
 	}
 	options.write_to_db = 0;
+	options.color = 1;
+	options.streak_offset = 3600;
 	strncpy(options.last_selected_actv, "none", 64);
 
 	// get config path
@@ -1008,8 +1169,6 @@ int main (int argc, char **argv)
 	// if no config then set default
 
 	dealloc_all(&actv_arr);
-
-	printf("command count = %d\n", argc);
 
 	return 0;
 }
