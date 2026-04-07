@@ -5,6 +5,8 @@ this is a rewritten from scratch version of the original tmtb i made some time a
 
 wip
 
+![screenshot](./screenshot.png)
+
 ## hoe toe use this piece of ~~shit~~ junk
 
 `tt activity new japanese` creates new activity called "japanese"\
