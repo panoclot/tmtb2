@@ -10,6 +10,7 @@
 #include <unistd.h>
 // #include <termios.h> // idk
 
+#define NAME_SIZE 64
 #define CRST "\x1B[m"
 
 #define OPT_START 0
@@ -19,10 +20,7 @@
 #define OPTARG_END 199
 
 enum option_enum {
-	AUTO,
 	NOSAVE,
-	DUMMY,
-	QUIET,
 	REMOVE,
 	RM,
 	DELETE,
@@ -31,10 +29,8 @@ enum option_enum {
 	STOP,
 	PAUSE,
 	START,
-	UNPAUSE,
 	RUN,
 	EDIT,
-	FIND,
 	MOVE,
 	TREE,
 	FLIP,
@@ -46,6 +42,7 @@ enum option_enum {
 	GOAL,
 	WEEK,
 	QSTART,
+	HELP,
 	AND
 };
 
@@ -77,7 +74,7 @@ typedef struct {
 	unsigned int streak_offset;
 
 	unsigned int write_to_db;
-	char last_selected_actv[64];
+	char last_selected_actv[NAME_SIZE + 1];
 
 	int tokens[128];
 	int opt_arg;
@@ -104,7 +101,7 @@ typedef struct {
 	int rec_count;
 	int rec_size;
 	int highest_streak;
-	char name[64];
+	char name[NAME_SIZE + 1];
 	rec *rec_arr;
 } actv;
 
@@ -139,6 +136,8 @@ int is_in_range (int x, int a, int b)
 
 // if eg. only 2 actv are called to be listed
 // dont load the whole db to memory
+// 
+// nvm its so fast it doesn't matter
 void actv_arr_mem_resize (actv_arr *actv_arr, int add)
 {
 	if (actv_arr->arr == NULL) {
@@ -190,7 +189,7 @@ int actv_find (actv_arr *actv_arr, char *query)
 	if (actv_arr->arr == NULL) { return -1; }
 
 	for (int i = 0; i < actv_arr->count; i++) {
-		if (!strncmp(query, actv_arr->arr[i].name, 64))
+		if (!strncmp(query, actv_arr->arr[i].name, NAME_SIZE))
 			return i;
 	}
 
@@ -279,7 +278,7 @@ int actv_rename (actv_arr *actv_arr, int index, char *rename)
 	if (actv_arr->arr == NULL) return 1;
 	if (actv_find(actv_arr, rename) != -1) return 2;
 
-	strncpy(actv_arr->arr[index].name, rename, 64); // TODO / change all names to 64
+	strncpy(actv_arr->arr[index].name, rename, NAME_SIZE); // TODO / change all names to 64
 	return 0;
 }
 
@@ -554,6 +553,12 @@ void actv_show (actv *actv, options *options)
 	strftime(date, 32, "%Y-%m-%d at %H:%M", tm);
 	printf("created: %s\n", date);
 
+	if (actv->rec_count) { // last record
+		tm = localtime(&actv->rec_arr[actv->rec_count - 1].created);
+		strftime(date, 32, "%Y-%m-%d at %H:%M", tm);
+		printf("last record: %s\n", date);
+	}
+
 	my_time_format(&clock, &sign, actv->total); // total time
 	if (sign == 's')
 		printf("total time: %1.f%c", clock, sign);
@@ -581,7 +586,7 @@ void actv_show (actv *actv, options *options)
 
 	// GOAL
 	my_time_format(&clock, &sign, actv->goal); // week average
-	printf("goal: %.f%c\n", clock, sign);
+	printf("goal: %.1f%c\n", clock, sign);
 
 	printf("record count: %d\n", actv->rec_count);
 }
@@ -711,7 +716,7 @@ void db_read (FILE *db, actv_arr *actv_arr, options *options)
 				actv_arr_mem_resize(actv_arr, 2);
 				tmp_a = actv_arr->arr;
 
-				fscanf(db, ",%[^,],%d,%ld,%ld,%ld,%d,%d,\n",
+				fscanf(db, ",%[^,],%u,%ld,%ld,%ld,%d,%d,\n",
 					 tmp_a[*ac - 1].name,
 					&tmp_a[*ac - 1].is_run,
 					&tmp_a[*ac - 1].timer,
@@ -775,10 +780,7 @@ int set_options (int argc, char **argv, options *options)
 	if (argc > 128) { puts("too many args!"); return 1; }
 
 	char option_list[][10] = {
-		"auto",
 		"nosave", // don't write
-		"dummy", // same as nosave
-		"quiet", // no echo
 		"remove",
 		"rm", // same as remove
 		"delete", // same as remove
@@ -787,10 +789,8 @@ int set_options (int argc, char **argv, options *options)
 		"stop", // stop timer
 		"pause", // same as stop
 		"start", // start timer
-		"unpause", // same as start
 		"run", // same as start
 		"edit", // edit time for record
-		"find", // search for record by date
 		"move", // move actv. up or down in array
 		"tree", // show in tree mode
 		"flip", // flip timer
@@ -802,6 +802,7 @@ int set_options (int argc, char **argv, options *options)
 		"goal",
 		"week",
 		"qstart",
+		"help",
 		"and"
 	};
 
@@ -873,10 +874,8 @@ void ui_new (char **argv, actv_arr *actv_arr, options *options)
 					}
 					rec_new(&actv_arr->arr[tmp]);
 					printf("new record created.\n");
-				} else { printf("activity \"%s\" hasn't been found.\n", argv[j]); }
+				} else { printf("activity \"%s\" does not exist.\n", argv[j]); }
 			}
-			break;
-		case TIME:
 			break;
 		default: 
 			printf("incorrect option argument! try `activity` or `record`\n");
@@ -884,7 +883,7 @@ void ui_new (char **argv, actv_arr *actv_arr, options *options)
 	}
 }
 
-void ui_rm (char **argv, actv_arr *actv_arr, options *options)
+void ui_rm (char **argv, actv_arr *actv_arr, options *options) // TODO
 {
 	options->write_to_db = 1;
 	// strncpy(options->last_selected_actv, "none");
@@ -928,17 +927,17 @@ void ui_rm (char **argv, actv_arr *actv_arr, options *options)
 		case REC:
 			if (options->arg_end - options->arg_start > 2) { 
 				printf("removing a record supports only one operation at once.\
-				(tt rm rec [actv] [record index])\n"); 
+				(tt rm rec [actv] <record index>)\n"); 
 				break;
 			}
 			char *endptr;
 			int index = strtol(argv[options->arg_end], &endptr, 10);
 			if (endptr == argv[options->arg_end]) {
-				printf("no index was provided. try `tt rm rec [actv] [index]`\n"
+				printf("no index was provided. try `tt rm rec [actv] <index>`\n"
 				"to get the index, try `tt show rec [actv]`\n"); // TODO
 				return;
 			}
-			index -= 1;
+			index -= 1; // match index to actual position in the array
 			int tmp = actv_find(actv_arr, argv[options->arg_start]);
 			if (tmp != -1) {
 				if (actv_arr->arr[tmp].rec_count == 0) {
@@ -982,7 +981,7 @@ void ui_rm (char **argv, actv_arr *actv_arr, options *options)
 	}
 }
 
-void ui_start (char **argv, actv_arr *actv_arr, options *options, char mode)
+void ui_start (char **argv, actv_arr *actv_arr, options *options, char mode) // TODO
 {
 	options->write_to_db = 1;
 	if (strcmp(options->last_selected_actv, "none")) { 
@@ -1009,7 +1008,7 @@ void ui_start (char **argv, actv_arr *actv_arr, options *options, char mode)
 	}
 }
 
-void ui_stop (char **argv, actv_arr *actv_arr, options *options)
+void ui_stop (char **argv, actv_arr *actv_arr, options *options) // TODO
 {
 	options->write_to_db = 1;
 	if (strcmp(options->last_selected_actv, "none")) { 
@@ -1027,7 +1026,7 @@ void ui_stop (char **argv, actv_arr *actv_arr, options *options)
 	}
 }
 
-void ui_flip (char **argv, actv_arr *actv_arr, options *options)
+void ui_flip (char **argv, actv_arr *actv_arr, options *options) // TODO
 {
 	options->write_to_db = 1;
 	if (strcmp(options->last_selected_actv, "none")) { 
@@ -1049,7 +1048,7 @@ void ui_flip (char **argv, actv_arr *actv_arr, options *options)
 	}
 }
 
-void ui_show (char **argv, actv_arr *actv_arr, options *options)
+void ui_show (char **argv, actv_arr *actv_arr, options *options) // TODO
 {
 	if (options->opt_arg != EMPTY) {
 		switch (options->tokens[options->opt_arg]) {
@@ -1117,11 +1116,13 @@ void ui_rename (char **argv, actv_arr *actv_arr, options *options)
 	actv_rename(actv_arr, index, argv[options->arg_end]);
 }
 
-void ui_edit (char **argv, actv_arr *actv_arr, options *options)
+// eg. tt edit japanese 120:23:0 // tt edit japanese -0:25:0 // TODO
+// tt edit japanese 392392
+void ui_edit (char **argv, actv_arr *actv_arr, options *options) // TODO
 {
 	options->write_to_db = 1;
 	if (options->arg_start == EMPTY) {
-		printf("no activity was specified. try `tt rename [name] [new name]`\n");
+		printf("no activity was specified. try `tt edit [name] <time in seconds>`\n");
 		return;
 	}
 	int tmp;
@@ -1130,14 +1131,58 @@ void ui_edit (char **argv, actv_arr *actv_arr, options *options)
 		return;
 	}
 	if (actv_arr->arr[tmp].is_run) {
-		printf("timer is active. stop it first to edit.\n");
+		printf("some timer is active. stop it first to edit.\n");
 		return;
+	}
+	if (options->arg_end - options->arg_start > 2) { 
+		printf("editing supports only one operation at once.\n"); 
+		return;
+	}
+
+	char *endptr;
+	int new_time = strtol(argv[options->arg_end], &endptr, 10);
+	if (endptr == argv[options->arg_end]) {
+		printf("no value was provided. try `tt edit [actv] <time in seconds>`\n"); // TODO
+		return;
+	}
+
+	time_t *rec_time = &actv_arr->arr[tmp].rec_arr[actv_arr->arr[tmp].rec_count - 1].time;
+	if (actv_arr->arr[tmp].rec_arr) {
+		// actv_arr->arr[tmp].rec_arr[actv_arr->arr[tmp].rec_count - 1].time += new_time;
+		if (*rec_time + new_time < 0) { printf("time can't be less than zero!\n"); return; }
+		*rec_time += new_time;
+		actv_arr->arr[tmp].total += new_time;
 	}
 }
 
-void ui_goal (char **argv, actv_arr *actv_arr, options *options)
+void ui_goal (char **argv, actv_arr *actv_arr, options *options) // TODO
 {
 	options->write_to_db = 1;
+	if (options->arg_start == EMPTY) {
+		printf("no activity was specified. try `tt goal [name] <time in seconds>`\n");
+		return;
+	}
+	int tmp;
+	if ( (tmp = actv_find(actv_arr, argv[options->arg_start])) == -1) {
+		printf("activity \"%s\" hasn't been found.\n", argv[options->arg_start]);
+		return;
+	}
+	if (options->arg_end - options->arg_start > 2) { 
+		printf("goal supports only one operation at once.\n"); 
+		return;
+	}
+
+	char *endptr;
+	int new_time = strtol(argv[options->arg_end], &endptr, 10);
+	if (endptr == argv[options->arg_end]) {
+		printf("no value was provided. try `tt edit [actv] <time in seconds>`\n"); // TODO
+		return;
+	}
+
+	if (new_time < 0) { printf("time can't be less than zero!\n"); return; } 
+
+	actv_arr->arr[tmp].goal = new_time;
+	printf("new goal of %ds set for \"%s\".\n", actv_arr->arr[tmp].goal, argv[options->arg_start]);
 }
 
 void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
@@ -1146,7 +1191,7 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 	unsigned int option = EMPTY;
 	int arg_start = EMPTY;
 	int arg_end = EMPTY;
-	int bl = 0; // block_len 
+	int bl = 0; // block length 
 
 	for (int i = 0; i < argc; i++) {
 		opt_arg = EMPTY;
@@ -1214,12 +1259,6 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 		options->arg_start = arg_start;
 		options->arg_end = arg_end;
 
-		// if (strncmp(options->last_selected_actv, "none", 128)) { 
-		// 	if (arg_start == EMPTY) {
-
-		// 	}
-		// }
-		 
 		switch (options->tokens[option]) {
 			case NEW:
 			case ADD:
@@ -1233,14 +1272,13 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 				// TODO / fix last_selected_actv being changed to int
 				break;
 			case EDIT:
-				// ui_edit(argv, actv_arr, options);
-				// options->write_to_db = 1;
-				puts("tbd"); // TODO
+				ui_edit(argv, actv_arr, options);
 				break;
 			case RENAME:
 				ui_rename(argv, actv_arr, options);
 				break;
 			case START:
+			case RUN:
 				ui_start(argv, actv_arr, options, 'b');
 				break;
 			case STOP:
@@ -1257,12 +1295,42 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 				ui_show(argv, actv_arr, options);
 				break;
 			case GOAL:
+				ui_goal(argv, actv_arr, options);
 				break;
+			case HELP:
+				printf(
+					"\ntt [option] [opt. argument] [name] <number>\n\n"
+					"OPTIONS\n"
+					"run,"
+					"start <- start timer\n"
+					"qstart <- create new record and start timer\n"
+					"pause,"
+					"stop <- stop timer\n"
+					"flip <- flip timer on or off\n"
+					"add,"
+					"new <- create new activity/record\n"
+					"delete,"
+					"remove,"
+					"rm,"
+					"del <- delete activity/record\n"
+					"show <- show activity\n"
+					"goal <- set goal\n"
+					"edit <- add or substract time from current record\n"
+					"rename <- rename activity\n\n"
+					"OPTION ARGUMENTS\n"
+					"activity,"
+					"actv\n"
+					"record,"
+					"rec\n"
+					"all\n\n"
+				);
+				return;
+				// break;
 			case NOP:
 				if (arg_start == EMPTY) {
-					printf("no activity is selected. these are available choices:\n");
+					printf("no option specified. these are your existing activities:\n");
 					if (!actv_arr->count)
-						printf("there are no available choices.\ncreate an activity with: `tt new activity [name]`\nit will remain selected on next invoke.\n");
+						printf("there are no existing activities.\ncreate an activity with: `tt new activity [name]`\n");
 					else
 						for (int j = 0; j < actv_arr->count; j++)
 							printf("* %s\n", actv_arr->arr[j].name);
@@ -1277,35 +1345,53 @@ void ui (int argc, char **argv, actv_arr *actv_arr, options *options)
 	// search for last specified option and keep it as default for next operation
 	if (arg_end != EMPTY) {
 		if (actv_find(actv_arr, argv[arg_end]) != -1)
-			strncpy(options->last_selected_actv, argv[arg_end], 64);
+			strncpy(options->last_selected_actv, argv[arg_end], NAME_SIZE);
 	}
+	// if (!arg_end_is_int) {
+	// 	if (actv_find(actv_arr, argv[arg_end]) != -1)
+	// 		strncpy(options->last_selected_actv, argv[arg_end], NAME_SIZE);
+	// } else if (arg_start != EMPTY) {
+	// 	if (actv_find(actv_arr, argv[arg_start]) != -1)
+	// 		strncpy(options->last_selected_actv, argv[arg_start], NAME_SIZE);
+	// }
 }
 
-void edit_actv ();
 void get_config_file ();
 
 int main (int argc, char **argv)
 {
- 	FILE *db;
 	actv_arr actv_arr = {0, 0, NULL};
-	char *conf_path;
+ 	FILE *db;
+	char *home = getenv("HOME");
 	options options;
 	for (int i = 0; i < 128; i++) {
 		options.tokens[i] = EMPTY;
 	}
 	options.write_to_db = 0;
 	options.color = 1;
-	options.streak_offset = 3600;
-	strncpy(options.last_selected_actv, "none", 64);
+	options.streak_offset = 3600 * 1;
+	strncpy(options.last_selected_actv, "none", NAME_SIZE);
+
+	char *db_path = strcat(home, "/.config/tmtb2/db");
+	// char *conf_path;
+	// char *backup_dir_path;
 
 	// get config path
 	// config_read();
 	// db_find();
 	 
-	if (set_options(argc, argv, &options)) return 1;
+	if (set_options(argc, argv, &options)) { return 1; }
 
 	// open and read db
-	db = fopen("./db/test.db", "r");
+	// db = fopen("./db/test.db", "r");
+	db = fopen(db_path, "r");
+	if (db == NULL) { 
+		printf(
+			"db file wasn't found.\n"
+			"try: `mkdir -p ~/.config/tmtb2/backup` and create files: `db` `config` in tmtb2.\n"
+		); 
+		return 1; 
+	}
 	db_read(db, &actv_arr, &options);
 	fclose(db);
 
@@ -1315,7 +1401,8 @@ int main (int argc, char **argv)
 
 	// write and close db if any changes were made
 	if (options.write_to_db) {
-		db = fopen("./db/test.db", "w");
+		// db = fopen("./db/test.db", "w");
+		db = fopen(db_path, "w");
 		db_write(db, &actv_arr, options);
 		fclose(db);
 	}

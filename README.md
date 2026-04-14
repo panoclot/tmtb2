@@ -14,13 +14,11 @@ wip
 `tt flip` flips the timer on or off.\
 `tt show all` will list every activity.
 
-try `tt help` for more options. (doesn't work yet :p)
+try `tt help` for more options.
 
 ## tbd
 
 - groups
 - chart
-- streak
-- last week avg
 
 i have no clue how to use git
